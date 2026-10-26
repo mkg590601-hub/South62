@@ -2,7 +2,7 @@
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1a0b3d"><meta name="mobile-web-app-capable" content="yes">
-<title>South62</title>
+<title>South62</title><link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;font-family:system-ui,sans-serif}
@@ -46,6 +46,7 @@ header b{flex:1}
 <div id="call"><video id="rv" autoplay playsinline></video><video id="lv" autoplay playsinline muted></video>
 <div id="ce"></div><div class="bar"><button style="flex:1;background:#e53935" onclick="endCall()">Raccrocher</button></div></div>
 <script>
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 const $=s=>document.querySelector(s),LS=(k,v)=>v===undefined?JSON.parse(localStorage.getItem(k)||'null'):localStorage.setItem(k,JSON.stringify(v));
 let me,peer,conns={},friends=[],chats={},online={},cur,cl,ls,outbox=[],mr;
 const EM=['😀','😂','😍','🔥','👍','❤️','🎉','😮'];
