@@ -45,7 +45,7 @@ header b{flex:1}
 <div id="auth" class="s on"><h1>South62</h1><div class="box">
 <input id="u" placeholder="Pseudo" autocapitalize="none"><input id="p" type="password" placeholder="Mot de passe">
 <button onclick="auth(0)">Se connecter</button><button class="g" onclick="auth(1)">Créer un compte</button><div id="err"></div></div></div>
-<div id="home" class="s"><header><b id="me"></b><button class="g" onclick="addF()">+ Ami</button><button class="g" onclick="out()">Quitter</button></header>
+<div id="home" class="s"><header><b id="me"></b><button class="g nb" id="ib" style="display:none" onclick="tog()">🔔</button><button class="g" onclick="addF()">+ Ami</button><button class="g" onclick="out()">Quitter</button></header>
 <header id="ch"><b id="ct"></b><button class="g" onclick="call_(0)">📞</button><button class="g" onclick="call_(1)">🎥</button></header>
 <div class="list" id="ml"></div>
 <div class="bar"><button class="g" id="pb" onclick="tog()">+</button><input id="t" placeholder="Écrire un message…" onkeydown="if(event.key=='Enter')sendT()"><button class="g" id="rb" onclick="rec()">🎤</button><button onclick="sendT()">➤</button></div>
@@ -56,7 +56,7 @@ header b{flex:1}
 <script>
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 const $=s=>document.querySelector(s),LS=(k,v)=>v===undefined?JSON.parse(localStorage.getItem(k)||'null'):localStorage.setItem(k,JSON.stringify(v));
-let me,peer,conns={},friends=[],chats={},online={},cur,cl,ls,outbox=[],mr,unread={};
+let me,peer,conns={},friends=[],chats={},online={},cur,cl,ls,outbox=[],mr,unread={},inv=[],sent=[];
 const EM=['😀','😂','😍','🔥','👍','❤️','🎉','😮'];
 $('#ce').append(...EM.map(e=>{const s=document.createElement('span');s.textContent=e;s.onclick=()=>{fly(e);cur&&conns[cur]?.open&&conns[cur].send({t:'emo',e})};return s}));
 const show=i=>{document.querySelectorAll('.s').forEach(x=>x.classList.toggle('on',x.id==i));render()};
@@ -67,31 +67,41 @@ if(!p||w.length<4)return err('Pseudo (a-z, 0-9) et mot de passe de 4 caractères
 const a=LS('accs')||{},x=await h(w);
 if(c){if(a[p])return err('Pseudo déjà pris');a[p]=x;LS('accs',a)}else if(a[p]!==x)return err('Identifiants incorrects');
 start(p)}
-function start(p){me=p;friends=LS('f_'+p)||[];chats=LS('c_'+p)||{};err('');
+function start(p){me=p;friends=LS('f_'+p)||[];inv=LS('i_'+p)||[];sent=LS('o_'+p)||[];chats=LS('c_'+p)||{};err('');
 peer=new Peer('s62-'+p);
 peer.on('open',()=>{$('#me').textContent='● '+me;show('home');ping();setInterval(ping,8000)});
 peer.on('error',e=>{if(e.type=='unavailable-id'){err('Ce compte est déjà connecté ailleurs');peer.destroy()}});
 peer.on('connection',setup);peer.on('call',onCall)}
 function out(){location.reload()}
-function save(){LS('f_'+me,friends);LS('c_'+me,Object.fromEntries(Object.entries(chats).map(([k,v])=>[k,v.filter(m=>!m.u).slice(-200)])))}
-function ping(){friends.forEach(connect)}
+function save(){LS('f_'+me,friends);LS('i_'+me,inv);LS('o_'+me,sent);LS('c_'+me,Object.fromEntries(Object.entries(chats).map(([k,v])=>[k,v.filter(m=>!m.u).slice(-200)])))}
+function ping(){friends.concat(sent).forEach(connect)}
 function connect(f){if(conns[f]?.open)return;setup(peer.connect('s62-'+f,{reliable:true}))}
 function setup(c){const f=c.peer.slice(4);
-c.on('open',()=>{conns[f]=c;online[f]=1;c.send({t:friends.includes(f)?'hi':'req'});outbox=outbox.filter(o=>{if(o.f==f){c.send(o.m);return false}return true});render()});
+c.on('open',()=>{conns[f]=c;online[f]=1;c.send({t:sent.includes(f)&&!friends.includes(f)?'req':'hi'});outbox=outbox.filter(o=>{if(o.f==f){c.send(o.m);return false}return true});render()});
 c.on('data',d=>recv(f,d));c.on('close',()=>{online[f]=0;render()})}
 function recv(f,d){
-if(d.t=='req'&&!friends.includes(f)){if(confirm(f+' veut être ton ami. Accepter ?')){friends.push(f);save();conns[f]?.send({t:'ok'})}render()}
-else if(d.t=='ok'&&!friends.includes(f)){friends.push(f);save();render()}
-else if(!friends.includes(f))return;
-else if(d.t=='m'){const m={me:0,k:d.k,txt:d.txt};if(d.d){m.u=URL.createObjectURL(new Blob([d.d],{type:d.mime}))}(chats[f]=chats[f]||[]).push(m);if(f!=cur)unread[f]=(unread[f]||0)+1;save();render()}
+if(d.t=='req'){
+if(friends.includes(f)){conns[f]?.send({t:'ok'});return}
+if(sent.includes(f)){sent=sent.filter(x=>x!=f);friends.push(f);conns[f]?.send({t:'ok'});save();render();return}
+if(!inv.includes(f)){inv.push(f);save();$('#sh').classList.add('on');navigator.vibrate&&navigator.vibrate(200)}
+render();return}
+if(d.t=='ok'){if(sent.includes(f)){sent=sent.filter(x=>x!=f);if(!friends.includes(f))friends.push(f);save();render()}return}
+if(d.t=='no'){sent=sent.filter(x=>x!=f);save();render();return}
+if(!friends.includes(f))return;
+if(d.t=='m'){const m={me:0,k:d.k,txt:d.txt};if(d.d){m.u=URL.createObjectURL(new Blob([d.d],{type:d.mime}))}(chats[f]=chats[f]||[]).push(m);if(f!=cur)unread[f]=(unread[f]||0)+1;save();render()}
 else if(d.t=='emo')fly(d.e)}
 function addF(){const f=(prompt('Pseudo de ton ami :')||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
-if(!f||f==me||friends.includes(f))return;const c=peer.connect('s62-'+f,{reliable:true});setup(c);
-c.on('open',()=>{c.send({t:'req'});alert('Demande envoyée à '+f)});
-setTimeout(()=>{if(!c.open)alert(f+' est hors ligne ou introuvable.')},6000)}
+if(!f||f==me||friends.includes(f))return;
+if(!sent.includes(f))sent.push(f);save();
+if(conns[f]?.open)conns[f].send({t:'req'});else connect(f);
+render();$('#sh').classList.add('on')}
+function acc(f){inv=inv.filter(x=>x!=f);if(!friends.includes(f))friends.push(f);save();if(conns[f]?.open)conns[f].send({t:'ok'});else connect(f);render()}
+function ref(f){inv=inv.filter(x=>x!=f);save();if(conns[f]?.open)conns[f].send({t:'no'});render()}
 function tog(){$('#sh').classList.toggle('on')}
 function render(){
 const fl=$('#fl');fl.textContent='';
+const hd=t=>{const s=document.createElement('small');s.textContent=t;s.style.cssText='display:block;margin:12px 4px 6px;opacity:.7';fl.append(s)};
+if(inv.length){hd('Invitations reçues');inv.forEach(f=>{const d=document.createElement('div');d.className='f';d.style.marginBottom='6px';const n=document.createElement('b');n.style.flex=1;n.textContent=f;const a=document.createElement('button');a.textContent='Accepter';a.onclick=()=>acc(f);const r=document.createElement('button');r.className='g';r.textContent='Refuser';r.onclick=()=>ref(f);d.append(n,a,r);fl.append(d)})}
 const sec=(t,arr)=>{if(!arr.length)return;const s=document.createElement('small');s.textContent=t;s.style.cssText='display:block;margin:12px 4px 6px;opacity:.7';fl.append(s);
 arr.forEach(f=>{const d=document.createElement('div');d.className='f';d.style.marginBottom='6px';
 const dot=document.createElement('span');dot.className='d'+(online[f]?' on':'');
@@ -99,8 +109,9 @@ const n=document.createElement('b');n.style.flex=1;n.textContent=f;d.append(dot,
 if(unread[f]){const u=document.createElement('span');u.className='bd';u.textContent=unread[f];d.append(u)}
 d.onclick=()=>{cur=f;unread[f]=0;$('#sh').classList.remove('on');render()};fl.append(d)})};
 sec('Connectés',friends.filter(f=>online[f]));sec('Hors ligne',friends.filter(f=>!online[f]));
-if(!friends.length){const p=document.createElement('p');p.textContent='Aucun ami. Appuie sur + Ami en haut.';fl.append(p)}
-$('#pb').classList.toggle('nb',Object.values(unread).some(x=>x>0));
+if(sent.length){hd('Invitations envoyées (en attente)');sent.forEach(f=>{const p=document.createElement('div');p.style.cssText='padding:8px 4px';p.textContent='⏳ '+f;fl.append(p)})}
+if(!friends.length&&!inv.length&&!sent.length){const p=document.createElement('p');p.textContent='Aucun ami. Appuie sur + Ami en haut.';fl.append(p)}
+$('#pb').classList.toggle('nb',inv.length>0||Object.values(unread).some(x=>x>0));$('#ib').style.display=inv.length?'':'none';$('#ib').textContent='🔔 '+inv.length;
 $('#ct').textContent=cur?(online[cur]?'● ':'○ ')+cur:'Appuie sur + pour choisir un ami';
 const ml=$('#ml');ml.textContent='';
 (cur&&chats[cur]||[]).forEach(m=>{const d=document.createElement('div');d.className='m'+(m.me?' me':'');
