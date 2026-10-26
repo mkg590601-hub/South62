@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1a0b3d"><meta name="mobile-web-app-capable" content="yes">
+<title>South62</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;font-family:system-ui,sans-serif}
+body{background:linear-gradient(160deg,#1a0b3d,#0d47a1);color:#fff;height:100dvh;overflow:hidden}
+.s{display:none;height:100dvh;flex-direction:column}.s.on{display:flex}
+#auth{justify-content:center;align-items:center;gap:12px;padding:24px}
+h1{font-size:44px;background:linear-gradient(90deg,#ff4fa3,#00e5ff);-webkit-background-clip:text;color:transparent}
+input{width:100%;padding:14px;border-radius:14px;border:0;background:#ffffff22;color:#fff;font-size:16px}
+input::placeholder{color:#ffffff99}
+button{padding:12px 16px;border:0;border-radius:14px;background:linear-gradient(90deg,#ff4fa3,#7c4dff);color:#fff;font-size:16px}
+button.g{background:#ffffff22}
+.box{width:100%;max-width:380px;display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:center;gap:8px;padding:12px;background:#0006}
+header b{flex:1}
+.list{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.f{display:flex;align-items:center;gap:10px;padding:14px;border-radius:16px;background:#ffffff18}
+.d{width:12px;height:12px;border-radius:50%;background:#888}.d.on{background:#3dff7a;box-shadow:0 0 8px #3dff7a}
+.m{max-width:80%;padding:10px 12px;border-radius:16px;background:#ffffff22;word-break:break-word}
+.m.me{align-self:flex-end;background:linear-gradient(90deg,#ff4fa3,#7c4dff)}
+.m img,.m video{max-width:100%;border-radius:12px}
+.bar{display:flex;gap:6px;padding:8px;background:#0006}
+.bar input{flex:1}
+#call{position:fixed;inset:0;background:#000;display:none;flex-direction:column;z-index:9}
+#call.on{display:flex}
+#rv{flex:1;width:100%;min-height:0;object-fit:cover;background:#111}
+#lv{position:absolute;right:10px;top:10px;width:90px;border-radius:12px}
+#ce{display:flex;gap:8px;justify-content:center;padding:8px;font-size:28px}
+#ce span{cursor:pointer}
+.fl{position:fixed;bottom:25%;font-size:60px;animation:up 2.5s forwards;z-index:10;pointer-events:none}
+@keyframes up{to{transform:translateY(-300px);opacity:0}}
+#err{color:#ff8aa0}
+</style></head><body>
+<div id="auth" class="s on"><h1>South62</h1><div class="box">
+<input id="u" placeholder="Pseudo" autocapitalize="none"><input id="p" type="password" placeholder="Mot de passe">
+<button onclick="auth(0)">Se connecter</button><button class="g" onclick="auth(1)">Créer un compte</button><div id="err"></div></div></div>
+<div id="home" class="s"><header><b id="me"></b><button class="g" onclick="addF()">+ Ami</button><button class="g" onclick="out()">Quitter</button></header><div class="list" id="fl"></div></div>
+<div id="chat" class="s"><header><button class="g" onclick="show('home');cur=null">←</button><b id="ct"></b><button class="g" onclick="call_(0)">📞</button><button class="g" onclick="call_(1)">🎥</button></header>
+<div class="list" id="ml"></div>
+<div class="bar"><button class="g" onclick="$('#fi').click()">📷</button><button class="g" id="rb" onclick="rec()">🎤</button><input id="t" placeholder="Message" onkeydown="if(event.key=='Enter')sendT()"><button onclick="sendT()">➤</button></div>
+<input id="fi" type="file" accept="image/*,video/*" hidden onchange="sendF(this.files[0]);this.value=''"></div>
+<div id="call"><video id="rv" autoplay playsinline></video><video id="lv" autoplay playsinline muted></video>
+<div id="ce"></div><div class="bar"><button style="flex:1;background:#e53935" onclick="endCall()">Raccrocher</button></div></div>
+<script>
+const $=s=>document.querySelector(s),LS=(k,v)=>v===undefined?JSON.parse(localStorage.getItem(k)||'null'):localStorage.setItem(k,JSON.stringify(v));
+let me,peer,conns={},friends=[],chats={},online={},cur,cl,ls,outbox=[],mr;
+const EM=['😀','😂','😍','🔥','👍','❤️','🎉','😮'];
+$('#ce').append(...EM.map(e=>{const s=document.createElement('span');s.textContent=e;s.onclick=()=>{fly(e);cur&&conns[cur]?.open&&conns[cur].send({t:'emo',e})};return s}));
+const show=i=>{document.querySelectorAll('.s').forEach(x=>x.classList.toggle('on',x.id==i));render()};
+const err=m=>{$('#err').textContent=m};
+async function h(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function auth(c){const p=$('#u').value.trim().toLowerCase().replace(/[^a-z0-9]/g,''),w=$('#p').value;
+if(!p||w.length<4)return err('Pseudo (a-z, 0-9) et mot de passe de 4 caractères min.');
+const a=LS('accs')||{},x=await h(w);
+if(c){if(a[p])return err('Pseudo déjà pris');a[p]=x;LS('accs',a)}else if(a[p]!==x)return err('Identifiants incorrects');
+start(p)}
+function start(p){me=p;friends=LS('f_'+p)||[];chats=LS('c_'+p)||{};err('');
+peer=new Peer('s62-'+p);
+peer.on('open',()=>{$('#me').textContent='● '+me;show('home');ping();setInterval(ping,8000)});
+peer.on('error',e=>{if(e.type=='unavailable-id'){err('Ce compte est déjà connecté ailleurs');peer.destroy()}});
+peer.on('connection',setup);peer.on('call',onCall)}
+function out(){location.reload()}
+function save(){LS('f_'+me,friends);LS('c_'+me,Object.fromEntries(Object.entries(chats).map(([k,v])=>[k,v.filter(m=>!m.u).slice(-200)])))}
+function ping(){friends.forEach(connect)}
+function connect(f){if(conns[f]?.open)return;setup(peer.connect('s62-'+f,{reliable:true}))}
+function setup(c){const f=c.peer.slice(4);
+c.on('open',()=>{conns[f]=c;online[f]=1;c.send({t:friends.includes(f)?'hi':'req'});outbox=outbox.filter(o=>{if(o.f==f){c.send(o.m);return false}return true});render()});
+c.on('data',d=>recv(f,d));c.on('close',()=>{online[f]=0;render()})}
+function recv(f,d){
+if(d.t=='req'&&!friends.includes(f)){if(confirm(f+' veut être ton ami. Accepter ?')){friends.push(f);save();conns[f]?.send({t:'ok'})}render()}
+else if(d.t=='ok'&&!friends.includes(f)){friends.push(f);save();render()}
+else if(!friends.includes(f))return;
+else if(d.t=='m'){const m={me:0,k:d.k,txt:d.txt};if(d.d){m.u=URL.createObjectURL(new Blob([d.d],{type:d.mime}))}(chats[f]=chats[f]||[]).push(m);save();render()}
+else if(d.t=='emo')fly(d.e)}
+function addF(){const f=(prompt('Pseudo de ton ami :')||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+if(!f||f==me||friends.includes(f))return;const c=peer.connect('s62-'+f,{reliable:true});setup(c);
+c.on('open',()=>{c.send({t:'req'});alert('Demande envoyée à '+f)});
+setTimeout(()=>{if(!c.open)alert(f+' est hors ligne ou introuvable.')},6000)}
+function render(){
+const fl=$('#fl');fl.textContent='';
+if(!friends.length){const p=document.createElement('p');p.textContent='Aucun ami. Appuie sur + Ami.';fl.append(p)}
+friends.forEach(f=>{const d=document.createElement('div');d.className='f';
+const dot=document.createElement('span');dot.className='d'+(online[f]?' on':'');
+const n=document.createElement('b');n.style.flex=1;n.textContent=f;
+const s=document.createElement('small');s.textContent=online[f]?'en ligne':'hors ligne';
+d.append(dot,n,s);d.onclick=()=>{cur=f;$('#ct').textContent=f;show('chat')};fl.append(d)});
+if(cur){const ml=$('#ml');ml.textContent='';(chats[cur]||[]).forEach(m=>{const d=document.createElement('div');d.className='m'+(m.me?' me':'');
+if(m.k=='txt')d.textContent=m.txt;
+else if(m.u){const e=document.createElement(m.k=='img'?'img':m.k=='vid'?'video':'audio');e.src=m.u;if(m.k!='img')e.controls=true;d.append(e)}
+else d.textContent='[média non conservé]';ml.append(d)});ml.scrollTop=1e9}}
+function push(f,m,local){const c=conns[f];if(c?.open)c.send(m);else outbox.push({f,m});
+const o={me:1,k:m.k,txt:m.txt};if(m.d)o.u=URL.createObjectURL(new Blob([m.d],{type:m.mime}));(chats[f]=chats[f]||[]).push(o);save();render()}
+function sendT(){const v=$('#t').value.trim();if(!v||!cur)return;$('#t').value='';push(cur,{t:'m',k:'txt',txt:v})}
+async function sendF(f){if(!f||!cur)return;push(cur,{t:'m',k:f.type.startsWith('video')?'vid':'img',mime:f.type,d:await f.arrayBuffer()})}
+async function rec(){if(mr){mr.stop();return}
+try{const s=await navigator.mediaDevices.getUserMedia({audio:true}),ch=[];mr=new MediaRecorder(s);
+mr.ondataavailable=e=>ch.push(e.data);
+mr.onstop=async()=>{s.getTracks().forEach(t=>t.stop());const b=new Blob(ch,{type:mr.mimeType});mr=null;$('#rb').textContent='🎤';push(cur,{t:'m',k:'aud',mime:b.type,d:await b.arrayBuffer()})};
+mr.start();$('#rb').textContent='⏹'}catch(e){alert('Micro refusé')}}
+async function call_(v){if(!cur||!online[cur])return alert('Ami hors ligne');
+try{ls=await navigator.mediaDevices.getUserMedia({audio:true,video:!!v});cl=peer.call('s62-'+cur,ls,{metadata:{v}});wire(cl,v)}catch(e){alert('Caméra/micro refusé')}}
+async function onCall(c){const f=c.peer.slice(4);
+if(!friends.includes(f)||!confirm('Appel '+(c.metadata?.v?'vidéo':'audio')+' de '+f+'. Répondre ?'))return c.close();
+try{cur=f;ls=await navigator.mediaDevices.getUserMedia({audio:true,video:!!c.metadata?.v});c.answer(ls);cl=c;wire(c,c.metadata?.v)}catch(e){c.close()}}
+function wire(c,v){$('#lv').srcObject=ls;$('#lv').style.display=v?'block':'none';$('#call').classList.add('on');
+c.on('stream',s=>{$('#rv').srcObject=s});c.on('close',endCall)}
+function endCall(){cl?.close();cl=null;ls?.getTracks().forEach(t=>t.stop());ls=null;$('#call').classList.remove('on')}
+function fly(e){const s=document.createElement('div');s.className='fl';s.textContent=e;s.style.left=(10+Math.random()*70)+'%';document.body.append(s);setTimeout(()=>s.remove(),2600)}
+</script></body></html>
